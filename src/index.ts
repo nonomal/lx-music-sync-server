@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { initLogger } from '@/utils/log4js'
 import defaultConfig from './defaultConfig'
-import { ENV_PARAMS } from './constants'
+import { ENV_PARAMS, File } from './constants'
 import { checkAndCreateDirSync } from './utils'
 
 type ENV_PARAMS_Type = typeof ENV_PARAMS
@@ -43,7 +43,7 @@ const dataPath = envParams.DATA_PATH ?? path.join(__dirname, '../data')
 global.lx = {
   logPath: envParams.LOG_PATH ?? path.join(__dirname, '../logs'),
   dataPath,
-  userPath: path.join(dataPath, 'users'),
+  userPath: path.join(dataPath, File.userDir),
   config: defaultConfig,
 }
 
@@ -170,16 +170,11 @@ const checkAndCreateDir = (path: string) => {
 const checkUserConfig = (users: LX.Config['users']) => {
   const userNames: string[] = []
   const passwords: string[] = []
-  const warnPasswords: string[] = []
   for (const user of users) {
     if (userNames.includes(user.name)) exit('User name duplicate: ' + user.name)
     if (passwords.includes(user.password)) exit('User password duplicate: ' + user.password)
-    if (Buffer.from(user.password).toString('hex').length > 16) warnPasswords.push(user.password)
     userNames.push(user.name)
     passwords.push(user.password)
-  }
-  if (warnPasswords.length) {
-    console.warn(`\n${warnPasswords.join('\n')}\n\n⚠️  The length of the above passwords in hex exceeds 16 characters, they will be truncated.\n⚠️  See details: https://github.com/lyswhut/lx-music-sync-server/issues/28`)
   }
 }
 
@@ -187,8 +182,12 @@ checkAndCreateDir(global.lx.logPath)
 checkAndCreateDir(global.lx.dataPath)
 checkAndCreateDir(global.lx.userPath)
 checkUserConfig(global.lx.config.users)
+
+console.log(`Users:
+${global.lx.config.users.map(user => `  ${user.name}: ${user.password}`).join('\n') || '  No User'}
+`)
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { getUserDirname } = require('@/utils/data')
+const { getUserDirname } = require('@/user')
 for (const user of global.lx.config.users) {
   const dataPath = path.join(global.lx.userPath, getUserDirname(user.name))
   checkAndCreateDir(dataPath)
@@ -218,8 +217,14 @@ function normalizePort(val: string) {
 const port = normalizePort(envParams.PORT ?? '9527')
 const bindIP = envParams.BIND_IP ?? '127.0.0.1'
 
-void Promise.all([import('@/event'), import('@/server')]).then(async([{ createListEvent }, { startServer }]) => {
-  global.event_list = createListEvent()
-  return startServer(port, bindIP)
-})
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { createModuleEvent } = require('@/event')
+createModuleEvent()
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+require('@/utils/migrate').default(global.lx.dataPath, global.lx.userPath)
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { startServer } = require('@/server')
+startServer(port, bindIP)
 

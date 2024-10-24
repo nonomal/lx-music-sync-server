@@ -1,15 +1,17 @@
+// 这个文件导出的方法将暴露给客户端调用，第一个参数固定为当前 socket 对象
 // import { throttle } from '@common/utils/common'
 // import { sendSyncActionList } from '@main/modules/winMain'
+// import { SYNC_CLOSE_CODE } from '@/constants'
 import { SYNC_CLOSE_CODE } from '@/constants'
 import { getUserSpace } from '@/user'
-import { encryptMsg } from '@/utils/tools'
+// import { encryptMsg } from '@/utils/tools'
 
-let wss: LX.SocketServer | null
+// let wss: LX.SocketServer | null
 // let removeListener: (() => void) | null
 
 // type listAction = 'list:action'
 
-const handleListAction = async(userName: string, { action, data }: LX.Sync.ActionList) => {
+const handleListAction = async(userName: string, { action, data }: LX.Sync.List.ActionList) => {
   console.log('handleListAction', userName, action)
   switch (action) {
     case 'list_data_overwrite':
@@ -49,7 +51,7 @@ const handleListAction = async(userName: string, { action, data }: LX.Sync.Actio
       await global.event_list.list_music_clear(userName, data, true)
       break
     default:
-      return null
+      throw new Error('unknown list sync action')
   }
   const userSpace = getUserSpace(userName)
   let key = userSpace.listManage.createSnapshot()
@@ -137,54 +139,79 @@ const handleListAction = async(userName: string, { action, data }: LX.Sync.Actio
 //   // ...
 // }
 
-const broadcast = async(socket: LX.Socket, key: string, data: any, excludeIds: string[] = []) => {
-  if (!wss) return
-  const dataStr = JSON.stringify({ action: 'list:sync:action', data })
-  const userSpace = getUserSpace(socket.userInfo.name)
-  for (const client of wss.clients) {
-    if (excludeIds.includes(client.keyInfo.clientId) || !client.isReady || client.userInfo.name != socket.userInfo.name) continue
-    client.send(encryptMsg(client.keyInfo, dataStr), (err) => {
-      if (err) {
-        client.close(SYNC_CLOSE_CODE.failed)
-        return
-      }
-      userSpace.dataManage.updateDeviceSnapshotKey(client.keyInfo, key)
-    })
-  }
-}
+// const broadcast = async(socket: LX.Socket, key: string, data: any, excludeIds: string[] = []) => {
+//   if (!wss) return
+//   const dataStr = JSON.stringify({ action: 'list:sync:action', data })
+//   const userSpace = getUserSpace(socket.userInfo.name)
+//   for (const client of wss.clients) {
+//     if (excludeIds.includes(client.keyInfo.clientId) || !client.isReady || client.userInfo.name != socket.userInfo.name) continue
+//     client.send(encryptMsg(client.keyInfo, dataStr), (err) => {
+//       if (err) {
+//         client.close(SYNC_CLOSE_CODE.failed)
+//         return
+//       }
+//       userSpace.dataManage.updateDeviceSnapshotKey(client.keyInfo, key)
+//     })
+//   }
+// }
 
-// export const sendListAction = async(action: LX.Sync.ActionList) => {
+// export const sendListAction = async(action: LX.Sync.List.ActionList) => {
 //   console.log('sendListAction', action.action)
 //   // io.sockets
 //   await broadcast('list:sync:action', action)
 // }
 
-export const registerListHandler = (_wss: LX.SocketServer, socket: LX.Socket) => {
-  if (!wss) {
-    wss = _wss
-    // removeListener = registerListActionEvent()
-  }
+// export const registerListHandler = (_wss: LX.SocketServer, socket: LX.Socket) => {
+//   if (!wss) {
+//     wss = _wss
+//     // removeListener = registerListActionEvent()
+//   }
 
-  const userSpace = getUserSpace(socket.userInfo.name)
-  socket.onRemoteEvent('list:sync:action', (action) => {
-    if (!socket.isReady) return
-    // console.log(msg)
-    void handleListAction(socket.userInfo.name, action).then(key => {
-      if (!key) return
-      console.log(key)
-      userSpace.dataManage.updateDeviceSnapshotKey(socket.keyInfo, key)
-      void broadcast(socket, key, action, [socket.keyInfo.clientId])
+//   const userSpace = getUserSpace(socket.userInfo.name)
+//   socket.onRemoteEvent('list:sync:action', (action) => {
+//     if (!socket.isReady) return
+//     // console.log(msg)
+//     void handleListAction(socket.userInfo.name, action).then(key => {
+//       if (!key) return
+//       console.log(key)
+//       userSpace.dataManage.updateDeviceSnapshotKey(socket.keyInfo, key)
+//       void broadcast(socket, key, action, [socket.keyInfo.clientId])
+//     })
+//     // socket.broadcast.emit('list:action', { action: 'list_remove', data: { id: 'default', index: 0 } })
+//   })
+
+//   // socket.on('list:add', addMusic)
+// }
+// export const unregisterListHandler = () => {
+//   wss = null
+
+//   // if (removeListener) {
+//   //   removeListener()
+//   //   removeListener = null
+//   // }
+// }
+
+const handler: LX.Sync.ServerSyncHandlerListActions<LX.Socket> = {
+  async onListSyncAction(socket, action) {
+    if (!socket.moduleReadys?.list) return
+    const key = await handleListAction(socket.userInfo.name, action)
+    console.log(key)
+    const userSpace = getUserSpace(socket.userInfo.name)
+    await userSpace.listManage.updateDeviceSnapshotKey(socket.keyInfo.clientId, key)
+    const currentUserName = socket.userInfo.name
+    const currentId = socket.keyInfo.clientId
+    socket.broadcast((client) => {
+      if (client.keyInfo.clientId == currentId || !client.moduleReadys?.list || client.userInfo.name != currentUserName) return
+      void client.remoteQueueList.onListSyncAction(action).then(async() => {
+        return userSpace.listManage.updateDeviceSnapshotKey(client.keyInfo.clientId, key)
+      }).catch(err => {
+      // TODO send status
+        client.close(SYNC_CLOSE_CODE.failed)
+        // client.moduleReadys.list = false
+        console.log(err.message)
+      })
     })
-    // socket.broadcast.emit('list:action', { action: 'list_remove', data: { id: 'default', index: 0 } })
-  })
-
-  // socket.on('list:add', addMusic)
+  },
 }
-export const unregisterListHandler = () => {
-  wss = null
 
-  // if (removeListener) {
-  //   removeListener()
-  //   removeListener = null
-  // }
-}
+export default handler

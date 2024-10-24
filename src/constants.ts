@@ -10,6 +10,10 @@ export const ENV_PARAMS = [
   'LX_USER_',
 ] as const
 
+export const SPLIT_CHAR = {
+  DISLIKE_NAME: '@',
+  DISLIKE_NAME_ALIAS: '#',
+} as const
 
 export const LIST_IDS = {
   DEFAULT: 'default',
@@ -20,12 +24,20 @@ export const LIST_IDS = {
 } as const
 
 export const SYNC_CODE = {
-  helloMsg: 'Hello~::^-^::~v3~',
+  helloMsg: 'Hello~::^-^::~v4~',
   idPrefix: 'OjppZDo6',
   authMsg: 'lx-music auth::',
   msgAuthFailed: 'Auth failed',
   msgBlockedIp: 'Blocked IP',
   msgConnect: 'lx-music connect',
+
+
+  authFailed: 'Auth failed',
+  missingAuthCode: 'Missing auth code',
+  getServiceIdFailed: 'Get service id failed',
+  connectServiceFailed: 'Connect service failed',
+  connecting: 'Connecting...',
+  unknownServiceAddress: 'Unknown service address',
 } as const
 
 export const SYNC_CLOSE_CODE = {
@@ -33,7 +45,7 @@ export const SYNC_CLOSE_CODE = {
   failed: 4100,
 } as const
 
-export const TRANS_MODE: Readonly<Record<LX.Sync.Mode, LX.Sync.Mode>> = {
+export const TRANS_MODE: Readonly<Record<LX.Sync.List.SyncMode, LX.Sync.List.SyncMode>> = {
   merge_local_remote: 'merge_remote_local',
   merge_remote_local: 'merge_local_remote',
   overwrite_local_remote: 'overwrite_remote_local',
@@ -42,3 +54,20 @@ export const TRANS_MODE: Readonly<Record<LX.Sync.Mode, LX.Sync.Mode>> = {
   overwrite_remote_local_full: 'overwrite_local_remote_full',
   cancel: 'cancel',
 } as const
+
+export const File = {
+  serverInfoJSON: 'serverInfo.json',
+  userDir: 'users',
+  userDevicesJSON: 'devices.json',
+  listDir: 'list',
+  listSnapshotDir: 'snapshot',
+  listSnapshotInfoJSON: 'snapshotInfo.json',
+  dislikeDir: 'dislike',
+  dislikeSnapshotDir: 'snapshot',
+  dislikeSnapshotInfoJSON: 'snapshotInfo.json',
+} as const
+
+export const FeaturesList = [
+  'list',
+  'dislike',
+] as const

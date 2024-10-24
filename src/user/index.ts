@@ -1,9 +1,15 @@
-import { UserDataManage } from '@/utils/data'
-import { ListManage } from './modules/listManage'
+import { UserDataManage } from './data'
+import {
+  ListManage,
+  DislikeManage,
+} from '@/modules'
 
 export interface UserSpace {
   dataManage: UserDataManage
   listManage: ListManage
+  dislikeManage: DislikeManage
+  getDecices: () => Promise<LX.Sync.KeyInfo[]>
+  removeDevice: (clientId: string) => Promise<void>
 }
 const users = new Map<string, UserSpace>()
 
@@ -29,9 +35,19 @@ export const getUserSpace = (userName: string) => {
   if (!user) {
     console.log('new user data manage:', userName)
     const dataManage = new UserDataManage(userName)
+    const listManage = new ListManage(dataManage)
+    const dislikeManage = new DislikeManage(dataManage)
     users.set(userName, user = {
       dataManage,
-      listManage: new ListManage(dataManage),
+      listManage,
+      dislikeManage,
+      async getDecices() {
+        return this.dataManage.getAllClientKeyInfo()
+      },
+      async removeDevice(clientId) {
+        await listManage.removeDevice(clientId)
+        await dataManage.removeClientKeyInfo(clientId)
+      },
     })
   }
   return user
@@ -43,3 +59,6 @@ export const releaseUserSpace = (userName: string, force = false) => {
     users.delete(userName)
   } else seartDelayReleaseTimeout(userName)
 }
+
+
+export * from './data'
